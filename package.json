@@ -1,0 +1,17 @@
+{
+  "name": "rainbow-bucket",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "levels": "node scripts/generate-levels.mjs",
+    "validate": "node scripts/validate-levels.mjs",
+    "test": "node --test scripts/*.test.mjs"
+  },
+  "devDependencies": {
+    "vite": "^8.3.8"
+  }
+}

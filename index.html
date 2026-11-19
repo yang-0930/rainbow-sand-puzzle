@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#202a5b" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23202a5b'/%3E%3Crect x='10' y='18' width='12' height='30' rx='5' fill='%23FF5B5B'/%3E%3Crect x='26' y='18' width='12' height='30' rx='5' fill='%23FFC857'/%3E%3Crect x='42' y='18' width='12' height='30' rx='5' fill='%234D9DE0'/%3E%3C/svg%3E" />
+    <title>Rainbow Bucket · 彩虹收集桶</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas" aria-label="游戏画面"></canvas>
+
+      <div id="hud" class="layer hidden">
+        <div class="hud-top">
+          <div class="hud-chip"><span>关卡</span><strong id="hud-level">1</strong></div>
+          <div class="hud-chip"><span>分数</span><strong id="hud-score">0</strong></div>
+          <button id="btn-pause" class="icon-btn" aria-label="暂停">Ⅱ</button>
+        </div>
+        <div class="hud-bottom">
+          <button id="btn-restart" class="pill-btn">重新开始</button>
+          <button id="btn-sound" class="icon-btn small" aria-label="音效开关">♪</button>
+        </div>
+        <div id="bucket-tray" class="bucket-tray"></div>
+      </div>
+
+      <section id="menu-screen" class="screen">
+        <div class="menu-buckets" aria-hidden="true">
+          <i style="--c:#FF5B5B"></i><i style="--c:#FFC857"></i><i style="--c:#4D9DE0"></i><i style="--c:#59C98A"></i>
+        </div>
+        <h1 class="logo">RAINBOW<br /><span>BUCKET</span></h1>
+        <p class="subtitle">Sand Art Puzzle</p>
+        <div class="best-card">最高关卡 <strong id="menu-best">1</strong> · 累计得分 <strong id="menu-score">0</strong></div>
+        <button id="btn-start" class="big-btn">开始游戏</button>
+        <div class="menu-row">
+          <button id="btn-menu-sound" class="text-btn">音效：开</button>
+          <button id="btn-reset" class="text-btn">重置进度</button>
+        </div>
+        <p class="hint">点击彩色桶送上传送带 · 桶自动吸走同色底沙 · 三个同色小桶合成大桶</p>
+      </section>
+
+      <section id="pause-screen" class="screen hidden">
+        <div class="panel">
+          <h2>游戏暂停</h2>
+          <p>休息一下，彩虹等你回来</p>
+          <button id="btn-resume" class="big-btn">继续游戏</button>
+          <button id="btn-pause-restart" class="big-btn secondary">重新开始</button>
+          <button id="btn-pause-menu" class="big-btn secondary">返回主页</button>
+          <button id="btn-pause-sound" class="text-btn">音效：开</button>
+        </div>
+      </section>
+
+      <section id="result-screen" class="screen hidden">
+        <div class="panel">
+          <h2 id="result-title">恭喜通关</h2>
+          <div id="result-stars" class="stars" aria-label="星级">☆☆☆</div>
+          <p id="result-detail">本关分数 0</p>
+          <button id="btn-next" class="big-btn">下一关</button>
+          <button id="btn-retry" class="big-btn secondary">重新挑战</button>
+          <button id="btn-result-menu" class="big-btn secondary">返回主页</button>
+        </div>
+      </section>
+
+      <div id="toast" class="toast"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
