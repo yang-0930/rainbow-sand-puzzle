@@ -62,6 +62,10 @@ export class AudioManager {
     this.tone(660, 0.24, { type: 'sine', gain: 0.05, slide: 180, delay: 0.07 });
   }
 
+  warn() {
+    this.tone(240, 0.16, { type: 'sine', gain: 0.035, slide: -60 });
+  }
+
   error() {
     this.tone(190, 0.16, { type: 'sawtooth', gain: 0.045, slide: -70 });
   }

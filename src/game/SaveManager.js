@@ -7,6 +7,8 @@ function defaultSave() {
     highestLevel: 1,
     totalScore: 0,
     stars: {},
+    best: {},
+    hidden: {},
     sound: SETTINGS.audio.defaultEnabled
   };
 }
@@ -15,6 +17,12 @@ function safeInteger(value, fallback, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(number)));
+}
+
+function safeNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
 }
 
 export class SaveManager {
@@ -41,12 +49,37 @@ export class SaveManager {
           if (levelId > 0) stars[levelId] = safeInteger(value, 0, 0, 3);
         }
       }
+      const best = {};
+      if (parsed.best && typeof parsed.best === 'object') {
+        for (const [key, value] of Object.entries(parsed.best)) {
+          const levelId = safeInteger(key, 0, 1, this.levelCount);
+          if (levelId > 0 && value && typeof value === 'object') {
+            best[levelId] = {
+              efficiency: safeNumber(value.efficiency, 0, 0, 9999),
+              merges: safeInteger(value.merges, 0, 0, 999)
+            };
+          }
+        }
+      }
+      const hidden = {};
+      if (parsed.hidden && typeof parsed.hidden === 'object') {
+        for (const [key, value] of Object.entries(parsed.hidden)) {
+          const levelId = safeInteger(key, 0, 1, this.levelCount);
+          if (levelId > 0 && value) {
+            hidden[levelId] = value && typeof value === 'object'
+              ? { noMerge: value.noMerge === true }
+              : { noMerge: true };
+          }
+        }
+      }
       return {
         version: SETTINGS.saveVersion,
         unlockedLevel: safeInteger(parsed.unlockedLevel, 1, 1, this.levelCount),
         highestLevel: safeInteger(parsed.highestLevel, 1, 1, this.levelCount),
         totalScore: safeInteger(parsed.totalScore, 0, 0, Number.MAX_SAFE_INTEGER),
         stars,
+        best,
+        hidden,
         sound: parsed.sound !== false
       };
     } catch {
@@ -63,12 +96,26 @@ export class SaveManager {
     }
   }
 
-  recordWin(levelId, stars, score) {
-    const previous = this.data.stars[levelId] ?? 0;
-    this.data.stars[levelId] = Math.max(previous, Math.max(0, Math.min(3, stars)));
+  recordWin(levelId, stars, score, stats = {}) {
+    const previousStars = this.data.stars[levelId] ?? 0;
+    this.data.stars[levelId] = Math.max(previousStars, Math.max(0, Math.min(3, stars)));
     this.data.unlockedLevel = Math.min(this.levelCount, Math.max(this.data.unlockedLevel, levelId + 1));
     this.data.highestLevel = Math.min(this.levelCount, Math.max(this.data.highestLevel, levelId));
     this.data.totalScore += Math.max(0, Math.floor(score));
+
+    const previousBest = this.data.best[levelId] ?? null;
+    const efficiency = safeNumber(stats.efficiency, 0, 0, 9999);
+    const merges = Math.max(0, Math.floor(stats.merges ?? 0));
+    if (!previousBest || efficiency > previousBest.efficiency) {
+      this.data.best[levelId] = { efficiency, merges };
+    }
+    this.persist();
+    return { previousBest, currentBest: this.data.best[levelId] };
+  }
+
+  recordHidden(levelId, key) {
+    this.data.hidden[levelId] = this.data.hidden[levelId] || {};
+    this.data.hidden[levelId][key] = true;
     this.persist();
   }
 

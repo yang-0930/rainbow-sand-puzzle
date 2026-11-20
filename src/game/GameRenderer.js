@@ -1,5 +1,6 @@
 import { colorByIndex } from '../config/colors.js';
 import { SETTINGS } from '../config/settings.js';
+import { cellColor, isFrozen, isDanger, exposedColors } from './GameLogic.js';
 
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
   CanvasRenderingContext2D.prototype.roundRect = function roundRect(x, y, w, h, r) {
@@ -161,6 +162,26 @@ export class GameRenderer {
     ctx.restore();
   }
 
+  drawFrozenOverlay(ctx, cx, y, size) {
+    ctx.save();
+    roundedRect(ctx, cx - size / 2, y, size, size, 9);
+    ctx.fillStyle = 'rgba(210,244,255,0.58)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(94,164,214,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(cx, y + 7);
+    ctx.lineTo(cx, y + size - 7);
+    ctx.moveTo(cx - 8, y + size / 2 - 5);
+    ctx.lineTo(cx + 8, y + size / 2 + 5);
+    ctx.moveTo(cx + 8, y + size / 2 - 5);
+    ctx.lineTo(cx - 8, y + size / 2 + 5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   drawBoard(ctx, state) {
     const cell = SETTINGS.board.cellSize;
     const bottomY = SETTINGS.board.bottomY;
@@ -178,9 +199,11 @@ export class GameRenderer {
 
     state.columns.forEach((column, c) => {
       const shift = state.lastShift[c] ?? 0;
-      column.forEach((color, i) => {
+      column.forEach((value, i) => {
         const y = bottomY - (i + 1 + shift * (1 - progress)) * cell;
-        this.drawSandCell(ctx, startX + c * cell + cell / 2, y, cell - 3, color);
+        const x = startX + c * cell + cell / 2;
+        this.drawSandCell(ctx, x, y, cell - 3, cellColor(value));
+        if (isFrozen(value)) this.drawFrozenOverlay(ctx, x, y, cell - 3);
       });
     });
     ctx.restore();
@@ -215,6 +238,12 @@ export class GameRenderer {
     }
     ctx.restore();
 
+    if (state) {
+      this.drawPreview(ctx, state);
+      if (isDanger(state)) this.drawDanger(ctx, beltTop, beltHeight);
+      this.drawMergeGhosts(ctx, state, rects);
+    }
+
     rects.forEach((rect, index) => {
       ctx.save();
       roundedRect(ctx, rect.x + 4, rect.y + 8, rect.width - 8, rect.height - 8, 16);
@@ -225,6 +254,24 @@ export class GameRenderer {
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
+
+      if (state?.blocked?.has(index)) {
+        ctx.save();
+        roundedRect(ctx, rect.x + 4, rect.y + 8, rect.width - 8, rect.height - 8, 16);
+        ctx.fillStyle = 'rgba(10,8,30,0.74)';
+        ctx.fill();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffe28a';
+        ctx.font = '800 20px system-ui, sans-serif';
+        ctx.fillText('封锁', rect.centerX, rect.centerY - 4);
+        const item = (state.level.blockedSlots ?? []).find((block) => block.index === index);
+        const remaining = Math.max(0, (item?.unlockAfter ?? 0) - state.absorbedTotal);
+        ctx.fillStyle = 'rgba(255,255,255,0.82)';
+        ctx.font = '600 15px system-ui, sans-serif';
+        ctx.fillText(`${remaining} 沙后解锁`, rect.centerX, rect.centerY + 22);
+        ctx.restore();
+        return;
+      }
 
       const bucket = state?.slots[index];
       if (bucket) {
@@ -238,6 +285,58 @@ export class GameRenderer {
         );
       }
     });
+  }
+
+  drawPreview(ctx, state) {
+    const colors = exposedColors(state).slice(0, 3);
+    if (!colors.length) return;
+    const y = 704;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '600 17px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillText('底层颜色预告', 360, y - 16);
+    colors.forEach((color, index) => {
+      this.drawSandCell(ctx, 360 + (index - (colors.length - 1) / 2) * 34, y, 28, color);
+    });
+    ctx.restore();
+  }
+
+  drawDanger(ctx, beltTop, beltHeight) {
+    const pulse = 0.45 + 0.35 * Math.sin(this.animation.time / 130);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    roundedRect(ctx, 22, beltTop - 2, VIRTUAL_WIDTH - 44, beltHeight + 4, 44);
+    ctx.strokeStyle = '#ff5b5b';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawMergeGhosts(ctx, state, rects) {
+    const isPair = (a, b) =>
+      a && b && a.size === 'small' && b.size === 'small' && a.color === b.color;
+    const free = (index) => !state.slots[index] && !state.blocked.has(index);
+    const ghosts = new Set();
+    for (let i = 0; i <= state.slots.length - 3; i += 1) {
+      if (isPair(state.slots[i], state.slots[i + 1]) && free(i + 2)) ghosts.add(i + 2);
+      if (free(i) && isPair(state.slots[i + 1], state.slots[i + 2])) ghosts.add(i);
+    }
+    for (const index of ghosts) {
+      const rect = rects[index];
+      ctx.save();
+      roundedRect(ctx, rect.x + 8, rect.y + 12, rect.width - 16, rect.height - 20, 16);
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = '#ffe28a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffe28a';
+      ctx.font = '800 17px system-ui, sans-serif';
+      ctx.fillText('可合成', rect.centerX, rect.centerY);
+      ctx.restore();
+    }
   }
 
   drawBucket(ctx, cx, cy, bucket, state, scale = 1) {
@@ -334,6 +433,10 @@ export class GameRenderer {
 
   drawFlights(ctx) {
     for (const flight of this.animation.flights) {
+      if (flight.kind === 'sand') {
+        this.drawSandCell(ctx, flight.x, flight.y, 28, flight.color);
+        continue;
+      }
       const fakeState = { slots: [null] };
       this.drawBucket(ctx, flight.x, flight.y, {
         color: flight.color,

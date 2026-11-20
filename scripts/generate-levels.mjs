@@ -62,37 +62,78 @@ const SHAPES = {
   rocket: (x, y) =>
     (Math.abs(x) <= 0.26 && y >= -0.95 && y <= 0.55) ||
     (y > 0.3 && y <= 0.9 && Math.abs(x) <= (0.9 - y) * 0.55) ||
-    (y > 0.35 && (Math.abs(x) <= 0.55 && Math.abs(x) >= 0.26))
+    (y > 0.35 && Math.abs(x) <= 0.55 && Math.abs(x) >= 0.26)
 };
 
 const SHAPE_NAMES = Object.keys(SHAPES);
+const TIER_NAMES = ['', 'tutorial', 'practice', 'strategy', 'pressure', 'master'];
+const cellColor = (value) => (value >= 10 ? value - 10 : value);
 
 function planFor(levelId) {
-  if (levelId <= 5) {
-    return { colors: 2, cols: 9, rows: 7, slots: 5, capacity: 3, tickMs: 420, difficulty: 'easy' };
+  if (levelId <= 6) {
+    return {
+      tier: 1,
+      colors: levelId <= 2 ? 2 : 3,
+      cols: levelId <= 4 ? 9 : 10,
+      rows: levelId <= 4 ? 7 : 8,
+      slots: levelId <= 3 ? 7 : 6,
+      capacity: 3,
+      tickMs: 480 - (levelId - 1) * 10,
+      mechanics: []
+    };
   }
-  if (levelId <= 10) {
-    return { colors: 3, cols: 10, rows: 8, slots: 5, capacity: 3, tickMs: 390, difficulty: 'normal' };
+  if (levelId <= 12) {
+    return {
+      tier: 2,
+      colors: 3,
+      cols: levelId <= 9 ? 10 : 11,
+      rows: 8,
+      slots: 6,
+      capacity: 3,
+      tickMs: 410 - (levelId - 7) * 5,
+      mechanics: ['frozen'],
+      frozenRate: 0.18
+    };
   }
   if (levelId <= 20) {
     return {
-      colors: levelId <= 14 ? 3 : 4,
-      cols: 11,
-      rows: 9,
+      tier: 3,
+      colors: 4,
+      cols: levelId <= 16 ? 12 : 13,
+      rows: 10,
+      slots: 5,
+      capacity: 4,
+      tickMs: 370,
+      mechanics: ['holes']
+    };
+  }
+  if (levelId <= 28) {
+    const mechanics =
+      levelId <= 22 ? ['blocked'] : levelId <= 24 ? ['budget'] : ['blocked', 'budget'];
+    return {
+      tier: 4,
+      colors: 4,
+      cols: 13,
+      rows: 11,
       slots: 6,
-      capacity: levelId >= 17 ? 4 : 3,
-      tickMs: 360,
-      difficulty: 'hard'
+      capacity: 4,
+      tickMs: 340,
+      mechanics,
+      unlockAfter: 6 + Math.floor((levelId - 21) / 2)
     };
   }
   return {
+    tier: 5,
     colors: 4,
-    cols: 12,
-    rows: 10,
-    slots: levelId >= 27 ? 7 : 6,
+    cols: 13,
+    rows: 11,
+    slots: 5,
     capacity: 4,
-    tickMs: 330,
-    difficulty: 'expert'
+    tickMs: 310,
+    mechanics: ['frozen', 'blocked', 'budget'],
+    frozenRate: 0.2,
+    unlockAfter: 10,
+    hiddenGoal: levelId >= 33 ? 'noMerge' : null
   };
 }
 
@@ -107,6 +148,7 @@ function buildColumns(shapeName, plan, colors, scheme, rng) {
   };
 
   const shape = SHAPES[shapeName];
+  const frozenRate = plan.frozenRate ?? 0;
   for (let x = 0; x < cols; x += 1) {
     const nx = (x - (cols - 1) / 2) / (cols / 2);
     for (let y = rows - 1; y >= 0; y -= 1) {
@@ -116,10 +158,9 @@ function buildColumns(shapeName, plan, colors, scheme, rng) {
       if (scheme === 0) color = Math.floor((x / cols) * colors) % colors;
       else if (scheme === 1) color = Math.floor(((rows - 1 - y) / rows) * colors) % colors;
       else if (scheme === 2) color = (Math.floor(x / 2) + Math.floor(y / 2)) % colors;
-      else if (scheme === 3) {
-        color = Math.floor((Math.hypot(nx, ny) / 1.1) * colors) % colors;
-      } else color = blockColor(Math.floor(x / 2), Math.floor(y / 2));
-      columns[x].push(color);
+      else if (scheme === 3) color = Math.floor((Math.hypot(nx, ny) / 1.1) * colors) % colors;
+      else color = blockColor(Math.floor(x / 2), Math.floor(y / 2));
+      columns[x].push(rng() < frozenRate ? 10 + color : color);
     }
   }
   return columns;
@@ -130,23 +171,35 @@ function makeLevel(levelId) {
   const colors = Array.from({ length: plan.colors }, (_, index) => index);
   const shapeName = SHAPE_NAMES[(levelId - 1) % SHAPE_NAMES.length];
 
-  for (let attempt = 0; attempt < 160; attempt += 1) {
+  for (let attempt = 0; attempt < 220; attempt += 1) {
     const rng = mulberry32(levelId * 100003 + attempt * 4177 + 29);
     const scheme = (levelId + attempt * 2) % 5;
     const columns = buildColumns(shapeName, plan, plan.colors, scheme, rng);
     const sandCount = columns.reduce((sum, column) => sum + column.length, 0);
-    const bottomColors = new Set(columns.filter((column) => column.length).map((column) => column[0]));
-    const usedColors = new Set(columns.flat());
+    const bottomColors = new Set(
+      columns.filter((column) => column.length).map((column) => cellColor(column[0]))
+    );
+    const usedColors = new Set(columns.flat().map(cellColor));
     if (
-      sandCount < (levelId <= 5 ? 14 : levelId <= 10 ? 18 : 24) ||
-      (bottomColors.size < 2 && attempt < 100) ||
-      (usedColors.size < plan.colors && attempt < 120)
+      sandCount < (plan.tier === 1 ? 14 : plan.tier === 2 ? 26 : plan.tier === 3 ? 32 : plan.tier === 4 ? 40 : 36) ||
+      (bottomColors.size < 2 && attempt < 120) ||
+      (usedColors.size < plan.colors && attempt < 150)
     ) continue;
+
+    const blockedSlots = plan.mechanics.includes('blocked')
+      ? [{ index: (levelId - 1) % plan.slots, unlockAfter: plan.unlockAfter }]
+      : [];
+    const bucketBudget =
+      plan.mechanics.includes('budget')
+        ? Math.ceil(sandCount / plan.capacity) + (plan.tier === 5 ? 5 : 7)
+        : undefined;
 
     const level = {
       levelId,
       name: `第 ${levelId} 关`,
-      difficulty: plan.difficulty,
+      difficulty: TIER_NAMES[plan.tier],
+      tier: plan.tier,
+      mechanics: plan.mechanics,
       colors,
       shape: shapeName,
       columns,
@@ -155,39 +208,38 @@ function makeLevel(levelId) {
       conveyorSlots: plan.slots,
       smallCapacity: plan.capacity,
       tickMs: plan.tickMs,
+      blockedSlots,
+      bucketBudget,
+      hiddenGoal: plan.hiddenGoal ?? null,
       scoreThresholds: [0, 0, 0]
     };
 
-    const solution = solveLevel(level, { maxNodes: 25000 });
+    const solution = solveLevel(level, { maxNodes: 50000 });
     if (!solution.solvable) continue;
 
     const expectedScore =
       sandCount * 10 +
       Math.ceil(sandCount / plan.capacity) * 50 +
       100 +
-      Math.min(4, Math.floor(sandCount / (plan.capacity * 4))) * 20;
+      Math.min(6, Math.floor(sandCount / (plan.capacity * 4))) * 20;
     level.scoreThresholds = [
       0,
-      Math.round((expectedScore * 0.78) / 10) * 10,
-      Math.round((expectedScore * 0.94) / 10) * 10
+      Math.round((expectedScore * 0.76) / 10) * 10,
+      Math.round((expectedScore * 0.92) / 10) * 10
     ];
     return level;
   }
 
-  // 兜底：规则化棋盘（每列同色分段），必然可解。
   const columns = Array.from({ length: plan.cols }, (_, x) =>
     Array.from({ length: plan.rows }, (_, y) => (x + y) % plan.colors)
   );
   const sandCount = columns.reduce((sum, column) => sum + column.length, 0);
-  const expectedScore =
-    sandCount * 10 +
-    Math.ceil(sandCount / plan.capacity) * 50 +
-    100 +
-    Math.min(4, Math.floor(sandCount / (plan.capacity * 4))) * 20;
   return {
     levelId,
     name: `第 ${levelId} 关`,
-    difficulty: plan.difficulty,
+    difficulty: TIER_NAMES[plan.tier],
+    tier: plan.tier,
+    mechanics: [],
     colors,
     shape: 'fallback',
     columns,
@@ -196,19 +248,24 @@ function makeLevel(levelId) {
     conveyorSlots: plan.slots,
     smallCapacity: plan.capacity,
     tickMs: plan.tickMs,
-    scoreThresholds: [
-      0,
-      Math.round((expectedScore * 0.78) / 10) * 10,
-      Math.round((expectedScore * 0.94) / 10) * 10
-    ]
+    blockedSlots: [],
+    bucketBudget: undefined,
+    hiddenGoal: null,
+    scoreThresholds: [0, expectedScore(sandCount) * 0.76, expectedScore(sandCount) * 0.92].map(
+      (v, i) => (i === 0 ? 0 : Math.round(v / 10) * 10)
+    )
   };
 }
 
-const levels = Array.from({ length: 30 }, (_, index) => makeLevel(index + 1));
+function expectedScore(sandCount) {
+  return sandCount * 10 + Math.ceil(sandCount / 3) * 50 + 100;
+}
+
+const levels = Array.from({ length: 36 }, (_, index) => makeLevel(index + 1));
 const body = levels.map((level) => JSON.stringify(level)).join(',\n  ');
 writeFileSync(outFile, `// 由 scripts/generate-levels.mjs 生成，请勿手工编辑。\nexport const LEVELS = [\n  ${body}\n];\n`, 'utf8');
 
 for (const level of levels) {
   if (!solveLevel(level).solvable) throw new Error(`关卡 ${level.levelId} 无解`);
 }
-console.log(`已生成并验证 ${levels.length} 个沙画关卡 -> ${outFile}`);
+console.log(`已生成并验证 ${levels.length} 个分层沙画关卡 -> ${outFile}`);

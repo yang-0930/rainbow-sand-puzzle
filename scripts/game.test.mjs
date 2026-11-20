@@ -129,7 +129,71 @@ test('存档可处理损坏数据、版本升级并正确记录通关', () => {
   assert.equal(new SaveManager(storage, 30).data.unlockedLevel, 1);
 });
 
-test('全部 30 个沙画关卡可解且可用真实逻辑通关', () => {
+test('冻结沙粒需要两次同色吸沙才清除', () => {
+  const state = GameLogic.createLevelState(makeLevel({ columns: [[10]], conveyorSlots: 2 }));
+  GameLogic.placeBucket(state, 0);
+  GameLogic.tick(state);
+  assert.deepEqual(state.columns[0], [0]);
+  assert.equal(state.absorbed, 1);
+  GameLogic.tick(state);
+  assert.deepEqual(state.columns[0], []);
+});
+
+test('封锁槽位不可放置，吸沙达到条件后解锁', () => {
+  const level = makeLevel({
+    columns: [[0, 0, 0, 0]],
+    conveyorSlots: 3,
+    smallCapacity: 4,
+    blockedSlots: [{ index: 1, unlockAfter: 2 }]
+  });
+  const state = GameLogic.createLevelState(level);
+  assert.equal(GameLogic.placeBucket(state, 0).slot, 0);
+  assert.equal(GameLogic.placeBucket(state, 1).slot, 2);
+  assert.equal(GameLogic.placeBucket(state, 0).reason, 'full');
+  GameLogic.tick(state);
+  GameLogic.tick(state);
+  assert.equal(state.blocked.has(1), false);
+  assert.equal(GameLogic.placeBucket(state, 0).slot, 1);
+});
+
+test('桶预算用尽且无法继续吸沙时失败', () => {
+  const state = GameLogic.createLevelState(
+    makeLevel({ columns: [[0]], conveyorSlots: 3, bucketBudget: 2 })
+  );
+  GameLogic.placeBucket(state, 1);
+  GameLogic.placeBucket(state, 1);
+  assert.equal(state.status, 'lost');
+  assert.equal(state.reason, 'budget-exhausted');
+  assert.equal(GameLogic.placeBucket(state, 0).type, 'ignored');
+});
+
+test('隐藏目标在无合成通关时记录', () => {
+  const state = GameLogic.createLevelState(
+    makeLevel({ columns: [[0]], hiddenGoal: 'noMerge', conveyorSlots: 2 })
+  );
+  GameLogic.placeBucket(state, 0);
+  GameLogic.tick(state);
+  assert.equal(state.status, 'won');
+  assert.equal(state.hiddenCompleted, true);
+});
+
+test('最佳效率与隐藏挑战会写入并读取存档', () => {
+  const map = new Map();
+  const storage = {
+    getItem: (key) => map.get(key) ?? null,
+    setItem: (key, value) => map.set(key, value)
+  };
+  const save = new SaveManager(storage, 36);
+  save.recordWin(7, 2, 500, { efficiency: 2.4, merges: 1 });
+  save.recordHidden(7, 'noMerge');
+  const reloaded = new SaveManager(storage, 36);
+  assert.equal(reloaded.data.best[7].efficiency, 2.4);
+  assert.equal(reloaded.data.hidden[7].noMerge, true);
+  save.recordWin(7, 3, 600, { efficiency: 1.8, merges: 0 });
+  assert.equal(save.data.best[7].efficiency, 2.4);
+});
+
+test('全部 36 个分层沙画关卡可解且可用真实逻辑通关', () => {
   for (const level of LEVELS) {
     const solution = solveLevel(level);
     assert.equal(solution.solvable, true, `关卡 ${level.levelId} 无解`);

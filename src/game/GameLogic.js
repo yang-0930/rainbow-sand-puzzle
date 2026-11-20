@@ -1,15 +1,23 @@
 import { SETTINGS } from '../config/settings.js';
 
+export const FROZEN_OFFSET = 10;
+
+export const cellColor = (value) => (value >= FROZEN_OFFSET ? value - FROZEN_OFFSET : value);
+export const isFrozen = (value) => value >= FROZEN_OFFSET;
+
 export function createLevelState(level) {
   return {
     level,
     columns: level.columns.map((column) => column.slice()),
     slots: new Array(level.conveyorSlots).fill(null),
+    blocked: new Set((level.blockedSlots ?? []).map((item) => item.index)),
     score: 0,
     placed: 0,
     absorbed: 0,
+    absorbedTotal: 0,
     clearedBuckets: 0,
     merges: 0,
+    hiddenCompleted: false,
     status: 'playing',
     reason: null,
     lastShift: new Array(level.columns.length).fill(0)
@@ -23,13 +31,29 @@ export function totalSand(state) {
 export function exposedColors(state) {
   const set = new Set();
   for (const column of state.columns) {
-    if (column.length) set.add(column[0]);
+    if (column.length) set.add(cellColor(column[0]));
   }
   return [...set].sort();
 }
 
+export function canAbsorbAny(state) {
+  const exposed = exposedColors(state);
+  return state.slots.some(
+    (bucket) =>
+      bucket &&
+      bucket.count < bucket.capacity &&
+      exposed.includes(bucket.color)
+  );
+}
+
+export function isDanger(state) {
+  if (!state || state.status !== 'playing') return false;
+  const free = state.slots.filter((bucket, index) => !bucket && !state.blocked.has(index)).length;
+  return free <= 1 && !canAbsorbAny(state);
+}
+
 export function findFirstEmptySlot(state) {
-  return state.slots.indexOf(null);
+  return state.slots.findIndex((bucket, index) => bucket === null && !state.blocked.has(index));
 }
 
 export function cloneState(state) {
@@ -37,6 +61,7 @@ export function cloneState(state) {
     ...state,
     columns: state.columns.map((column) => column.slice()),
     slots: state.slots.map((bucket) => (bucket ? { ...bucket } : null)),
+    blocked: new Set(state.blocked),
     lastShift: state.lastShift.slice()
   };
 }
@@ -46,7 +71,7 @@ export function stateKey(state) {
   const slots = state.slots
     .map((bucket) => (bucket ? `${bucket.color}${bucket.count}${bucket.size === 'big' ? 'B' : 's'}` : '.'))
     .join(',');
-  return `${board}#${slots}`;
+  return `${board}#${slots}#${[...state.blocked].sort().join('')}`;
 }
 
 function resolveMerges(state, events) {
@@ -94,28 +119,35 @@ function checkEnd(state, events) {
     });
     state.status = 'won';
     state.score += SETTINGS.score.levelBonus;
+    state.hiddenCompleted = state.level.hiddenGoal === 'noMerge' && state.merges === 0;
     events.push({ type: 'win' });
     return;
   }
 
-  if (state.slots.includes(null)) return;
+  if (canAbsorbAny(state)) return;
 
-  const canAbsorb = state.slots.some(
-    (bucket) =>
-      bucket &&
-      bucket.count < bucket.capacity &&
-      state.columns.some((column) => column.length > 0 && column[0] === bucket.color)
-  );
-  if (!canAbsorb) {
-    state.status = 'lost';
-    state.reason = 'deadlock';
-    events.push({ type: 'lose', reason: 'deadlock' });
+  const free = state.slots.findIndex((bucket, index) => bucket === null && !state.blocked.has(index));
+  if (free >= 0) {
+    const budget = state.level.bucketBudget;
+    if (budget !== undefined && state.placed >= budget) {
+      state.status = 'lost';
+      state.reason = 'budget-exhausted';
+      events.push({ type: 'lose', reason: 'budget-exhausted' });
+    }
+    return;
   }
+
+  state.status = 'lost';
+  state.reason = 'deadlock';
+  events.push({ type: 'lose', reason: 'deadlock' });
 }
 
 export function placeBucket(state, color) {
   if (state.status !== 'playing') return { type: 'ignored' };
   if (!state.level.colors.includes(color)) return { type: 'invalid', reason: 'unavailable' };
+  if (state.level.bucketBudget !== undefined && state.placed >= state.level.bucketBudget) {
+    return { type: 'invalid', reason: 'budget' };
+  }
 
   const slot = findFirstEmptySlot(state);
   if (slot < 0) return { type: 'invalid', reason: 'full' };
@@ -146,9 +178,9 @@ export function tick(state) {
     let bestColumn = -1;
     let bestScore = -Infinity;
     state.columns.forEach((column, columnIndex) => {
-      if (!column.length || column[0] !== bucket.color) return;
+      if (!column.length || cellColor(column[0]) !== bucket.color) return;
       let run = 0;
-      while (run < column.length && column[run] === bucket.color) run += 1;
+      while (run < column.length && cellColor(column[run]) === bucket.color) run += 1;
       const distance = Math.abs(
         (columnIndex + 0.5) / state.columns.length - (slot + 0.5) / state.slots.length
       );
@@ -161,12 +193,18 @@ export function tick(state) {
 
     if (bestColumn < 0) return;
 
-    state.columns[bestColumn].shift();
-    shifts[bestColumn] += 1;
+    const frozen = isFrozen(state.columns[bestColumn][0]);
+    if (frozen) {
+      state.columns[bestColumn][0] = bucket.color;
+    } else {
+      state.columns[bestColumn].shift();
+      shifts[bestColumn] += 1;
+    }
     bucket.count += 1;
     state.absorbed += 1;
+    state.absorbedTotal += 1;
     state.score += SETTINGS.score.perSand;
-    events.push({ type: 'absorb', slot, column: bestColumn, color: bucket.color });
+    events.push({ type: 'absorb', slot, column: bestColumn, color: bucket.color, frozen });
 
     if (bucket.count >= bucket.capacity) {
       state.slots[slot] = null;
@@ -175,6 +213,13 @@ export function tick(state) {
       events.push({ type: 'bucketFull', slot, color: bucket.color });
     }
   });
+
+  for (const item of state.level.blockedSlots ?? []) {
+    if (state.blocked.has(item.index) && state.absorbedTotal >= item.unlockAfter) {
+      state.blocked.delete(item.index);
+      events.push({ type: 'unlock', slot: item.index });
+    }
+  }
 
   state.lastShift = shifts;
   resolveMerges(state, events);
@@ -191,9 +236,13 @@ export function starsForScore(level, score) {
 }
 
 export const GameLogic = {
+  cellColor,
+  isFrozen,
   createLevelState,
   totalSand,
   exposedColors,
+  canAbsorbAny,
+  isDanger,
   findFirstEmptySlot,
   cloneState,
   stateKey,

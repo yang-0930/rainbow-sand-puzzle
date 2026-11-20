@@ -26,6 +26,7 @@ export class Game {
     this.resultShown = false;
     this.resultTimer = 0;
     this.lastTime = performance.now();
+    this.lastWarn = 0;
 
     this.menu = new Menu({
       onStart: () => {
@@ -40,7 +41,7 @@ export class Game {
           this.menu.show(this.save.data);
         }
       }
-    });
+    }, this.levelManager.count);
     this.hud = new GameHUD({
       onPause: () => this.pause(),
       onRestart: () => this.restart(),
@@ -151,7 +152,13 @@ export class Game {
     if (result.type === 'ignored') return;
     if (result.type === 'invalid') {
       this.audio.error();
-      this.hud.toast(result.reason === 'full' ? '传送带已满，等桶吸满沙' : '该颜色不在本关');
+      const message =
+        result.reason === 'full'
+          ? '传送带已满，等桶吸满沙'
+          : result.reason === 'budget'
+            ? '本关沙桶预算已用完'
+            : '该颜色不在本关';
+      this.hud.toast(message);
       return;
     }
 
@@ -199,12 +206,27 @@ export class Game {
       });
       for (const event of absorbed) {
         const point = this.sandCellCenter(event.column);
+        const rect = this.renderer.computeSlotRects(this.state)[event.slot];
+        this.animation.addFlight({
+          fromX: point.x,
+          fromY: point.y,
+          toX: rect.centerX,
+          toY: rect.centerY,
+          color: event.color,
+          kind: 'sand',
+          duration: 260
+        });
         this.particles.sparkle(point.x, point.y, event.color, 6);
       }
       this.audio.collect();
     }
 
     for (const event of result.events) this.handleEvent(event);
+    if (GameLogic.isDanger(this.state) && performance.now() - this.lastWarn > 2200) {
+      this.lastWarn = performance.now();
+      this.audio.warn();
+      this.hud.toast('危险：没有可吸的颜色', 1200);
+    }
     this.hud.update(this.state);
   }
 
@@ -224,6 +246,10 @@ export class Game {
       this.audio.merge();
       this.hud.toast('三个小桶合成大桶！', 1100);
     }
+    if (event.type === 'unlock') {
+      this.audio.clear();
+      this.hud.toast(`${event.slot + 1} 号槽位已解锁`, 1000);
+    }
     if (event.type === 'win' || event.type === 'lose') this.finish(event);
   }
 
@@ -235,7 +261,15 @@ export class Game {
 
     if (event.type === 'win') {
       const stars = GameLogic.starsForScore(level, score);
-      this.save.recordWin(level.levelId, stars, score);
+      const efficiency = Math.round((this.state.absorbed / Math.max(1, this.state.placed)) * 10) / 10;
+      const { previousBest } = this.save.recordWin(level.levelId, stars, score, {
+        efficiency,
+        merges: this.state.merges
+      });
+      const bestDelta = previousBest
+        ? Math.round((efficiency - previousBest.efficiency) * 10) / 10
+        : 0;
+      if (this.state.hiddenCompleted) this.save.recordHidden(level.levelId, 'noMerge');
       this.audio.win();
       this.particles.burst(360, 420, 1, 44);
       this.resultTimer = window.setTimeout(() => {
@@ -244,17 +278,27 @@ export class Game {
           score,
           stars,
           levelId: level.levelId,
-          isLastLevel: this.levelIndex >= this.levelManager.count - 1
+          isLastLevel: this.levelIndex >= this.levelManager.count - 1,
+          efficiency,
+          bestDelta,
+          hiddenBadge: this.state.hiddenCompleted
         });
       }, 820);
     } else {
       this.audio.lose();
+      const conflict = [
+        ...new Set([
+          ...GameLogic.exposedColors(this.state),
+          ...this.state.slots.filter(Boolean).map((bucket) => bucket.color)
+        ])
+      ];
       this.resultTimer = window.setTimeout(() => {
         this.hud.hide();
         this.resultModal.showLose({
           levelId: level.levelId,
           score,
-          reason: event.reason
+          reason: event.reason,
+          conflict
         });
       }, 620);
     }

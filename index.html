@@ -31,6 +31,11 @@
         <h1 class="logo">RAINBOW<br /><span>BUCKET</span></h1>
         <p class="subtitle">Sand Art Puzzle</p>
         <div class="best-card">最高关卡 <strong id="menu-best">1</strong> · 累计得分 <strong id="menu-score">0</strong></div>
+        <div class="growth">
+          <div class="growth-head">成长进度 <span id="growth-pct">0%</span></div>
+          <div class="growth-bar"><i id="growth-fill"></i></div>
+          <div class="growth-stats">通关 <b id="growth-cleared">0</b>/36 · 三星 <b id="growth-three">0</b> · 总分 <b id="growth-score">0</b></div>
+        </div>
         <button id="btn-start" class="big-btn">开始游戏</button>
         <div class="menu-row">
           <button id="btn-menu-sound" class="text-btn">音效：开</button>
@@ -55,6 +60,9 @@
           <h2 id="result-title">恭喜通关</h2>
           <div id="result-stars" class="stars" aria-label="星级">☆☆☆</div>
           <p id="result-detail">本关分数 0</p>
+          <div id="result-efficiency" class="efficiency"></div>
+          <div id="result-conflict" class="conflict"></div>
+          <div id="result-hidden" class="hidden-badge hidden">隐藏挑战达成：无合成通关</div>
           <button id="btn-next" class="big-btn">下一关</button>
           <button id="btn-retry" class="big-btn secondary">重新挑战</button>
           <button id="btn-result-menu" class="big-btn secondary">返回主页</button>

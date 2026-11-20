@@ -305,6 +305,26 @@ body {
   max-width: 86%;
 }
 
+.growth {
+  width: min(86%, 340px);
+  padding: 1.8vmin 2.6vmin;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  text-align: left;
+}
+
+.growth-head { display: flex; justify-content: space-between; font-size: 3vmin; margin-bottom: 1.2vmin; }
+.growth-head span { color: var(--gold); font-weight: 800; }
+.growth-bar { height: 10px; border-radius: 999px; background: rgba(0,0,0,0.3); overflow: hidden; }
+.growth-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg,#FF5B5B,#FFC857,#59C98A,#4D9DE0); transition: width .4s; }
+.growth-stats { margin-top: 1.2vmin; font-size: 2.6vmin; opacity: .85; }
+.growth-stats b { color: var(--gold); }
+
+.efficiency { font-size: 3.2vmin; color: #ffe28a; }
+.conflict { font-size: 3vmin; opacity: .9; }
+.hidden-badge { padding: 1vmin 2.4vmin; border-radius: 999px; background: rgba(255,209,102,.2); border: 1px solid rgba(255,209,102,.6); color: #ffe28a; font-size: 3vmin; }
+
 .panel {
   width: min(86%, 400px);
   padding: 6vmin 5vmin;
