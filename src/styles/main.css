@@ -309,6 +309,7 @@ body {
   width: min(86%, 400px);
   padding: 6vmin 5vmin;
   border-radius: 6vmin;
+  color: #f7f5ff;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
@@ -329,10 +330,12 @@ body {
   transform: translate(-50%, 0) scale(0.9);
   padding: 1.6vmin 4vmin;
   border-radius: 999px;
-  background: rgba(12, 10, 32, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  font-size: 4vmin;
+  background: rgba(12, 10, 32, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #ffffff;
+  font-size: 4.2vmin;
   font-weight: 800;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s, transform 0.18s;
